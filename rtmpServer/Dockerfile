@@ -1,41 +1,34 @@
-ARG NGINX_VERSION=1.19.3
+ARG NGINX_VERSION=1.9.9
 ARG NGINX_RTMP_VERSION=1.2.1
 
-FROM alpine:3.12 AS build
+FROM alpine:3.15.4 AS build
 ARG NGINX_VERSION
 ARG NGINX_RTMP_VERSION
 
 COPY nginx-rtmp-fallthrough-fix.patch /tmp/nginx-rtmp-fallthrough-fix.patch
 
 RUN \
+  mkdir -p /var/nginx/rec && mkdir -p /var/nginx/logs && \
+  adduser nginx --system --no-create-home --group --disabled-login --disabled-password && \
   build_pkgs="build-base linux-headers openssl-dev pcre-dev wget zlib-dev patch" && \
   apk --no-cache add ${build_pkgs} ${runtime_pkgs} && \
   cd /tmp && \
   wget https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz && \
-  wget https://github.com/arut/nginx-rtmp-module/archive/v${NGINX_RTMP_VERSION}.tar.gz && \
+  wget wget https://github.com/defanator/nginx-rtmp-module/archive/fix-build-with-gcc8.zip && \
   tar xzf nginx-${NGINX_VERSION}.tar.gz && \
-  tar xzf v${NGINX_RTMP_VERSION}.tar.gz && \
-  patch nginx-rtmp-module-${NGINX_RTMP_VERSION}/ngx_rtmp_eval.c /tmp/nginx-rtmp-fallthrough-fix.patch && \
+  unzip fix-build-with-gcc8.zip && \
   cd /tmp/nginx-${NGINX_VERSION} && \
-  ./configure \
-    --prefix=/etc/nginx \
-    --sbin-path=/usr/sbin/nginx \
-    --conf-path=/etc/nginx/nginx.conf \
-    --error-log-path=/var/log/nginx/error.log \
-    --http-log-path=/var/log/nginx/access.log \
-    --pid-path=/var/run/nginx.pid \
-    --lock-path=/var/lock/nginx.lock \
-    --add-module=../nginx-rtmp-module-${NGINX_RTMP_VERSION} \
-    --with-http_ssl_module && \
+  ./configure  --add-module=../nginx-rtmp-module-fix-build-with-gcc8 && \
   make && \
   make install && \
   rm -rf /tmp/* && \
   apk del ${build_pkgs} && \
-  rm -rf /var/cache/apk/*
+  rm -rf /var/cache/apk/* && \
+  rc-update add nginx
 
-FROM alpine:3.12
+FROM alpine:3.15.4
 
-LABEL MAINTAINER Pedro H Freitas <1pedrohfreitas@gmail.com>
+LABEL MAINTAINER Pedro Freitas <1pedrohfreitas@gmail.com>
 
 COPY --from=build /usr/sbin/nginx /usr/sbin/nginx
 COPY --from=build /etc/nginx /etc/nginx
